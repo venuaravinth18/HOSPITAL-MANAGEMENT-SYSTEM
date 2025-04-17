@@ -1,0 +1,109 @@
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+
+app = Flask(__name__)
+
+# Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://username:password@localhost/hospital_db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# Models
+class Patient(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    age = db.Column(db.Integer)
+    gender = db.Column(db.String(10))
+    contact = db.Column(db.String(15))
+    medical_history = db.Column(db.Text)
+
+class Doctor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    specialization = db.Column(db.String(50))
+    experience = db.Column(db.Integer)
+
+class Appointment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'))
+    doctor_id = db.Column(db.Integer, db.ForeignKey('doctor.id'))
+    date = db.Column(db.String(20))
+    status = db.Column(db.String(20))
+
+class Bill(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'))
+    amount = db.Column(db.Float)
+    status = db.Column(db.String(20))
+
+class Bed(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_type = db.Column(db.String(20))  # e.g., ICU, Private, General
+    occupied = db.Column(db.Boolean, default=False)
+
+# Routes
+@app.route('/register_patient', methods=['POST'])
+def register_patient():
+    data = request.json
+    new_patient = Patient(
+        name=data['name'],
+        age=data['age'],
+        gender=data['gender'],
+        contact=data['contact'],
+        medical_history=data.get('medical_history', '')
+    )
+    db.session.add(new_patient)
+    db.session.commit()
+    return jsonify({"message": "Patient registered successfully!"}), 201
+
+@app.route('/register_doctor', methods=['POST'])
+def register_doctor():
+    data = request.json
+    new_doctor = Doctor(
+        name=data['name'],
+        specialization=data['specialization'],
+        experience=data['experience']
+    )
+    db.session.add(new_doctor)
+    db.session.commit()
+    return jsonify({"message": "Doctor registered successfully!"}), 201
+
+@app.route('/book_appointment', methods=['POST'])
+def book_appointment():
+    data = request.json
+    new_appointment = Appointment(
+        patient_id=data['patient_id'],
+        doctor_id=data['doctor_id'],
+        date=data['date'],
+        status="Scheduled"
+    )
+    db.session.add(new_appointment)
+    db.session.commit()
+    return jsonify({"message": "Appointment booked!"}), 201
+
+@app.route('/generate_bill', methods=['POST'])
+def generate_bill():
+    data = request.json
+    new_bill = Bill(
+        patient_id=data['patient_id'],
+        amount=data['amount'],
+        status="Unpaid"
+    )
+    db.session.add(new_bill)
+    db.session.commit()
+    return jsonify({"message": "Bill generated!"}), 201
+
+@app.route('/allocate_bed', methods=['POST'])
+def allocate_bed():
+    data = request.json
+    available_bed = Bed.query.filter_by(occupied=False, room_type=data['room_type']).first()
+    if available_bed:
+        available_bed.occupied = True
+        db.session.commit()
+        return jsonify({"message": f"Bed {available_bed.id} allocated!"}), 200
+    else:
+        return jsonify({"message": "No available beds!"}), 404
+
+if __name__ == '__main__':
+    app.run(debug=True)
